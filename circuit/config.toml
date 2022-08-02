@@ -1,0 +1,4 @@
+
+tiles = [
+	{name = "bridge", symmetry = "I", weight = 1.0},
+]
