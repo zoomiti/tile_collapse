@@ -1,8 +1,7 @@
-use clap::ArgAction;
-use clap::Parser;
-use serde::Deserialize;
-use std::fmt::Debug;
+use clap::{ArgAction, Parser};
 use std::path::Path;
+use std::{fmt::Debug, path::PathBuf};
+use tile_collapse::{Config, SimpleTiledModel};
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
@@ -24,33 +23,21 @@ fn is_dir(s: &str) -> Result<String, String> {
     }
 }
 
-#[derive(Deserialize, Debug)]
-struct Config {
-    #[allow(dead_code)]
-    tiles: Vec<Tile>,
-}
-
-#[derive(Deserialize, Debug)]
-struct Tile {
-    #[allow(dead_code)]
-    name: String,
-    #[allow(dead_code)]
-    symmetry: String,
-    #[allow(dead_code)]
-    weight: Option<f64>,
-}
-
 fn main() {
     let args = Args::parse();
 
     let dir = Path::new(&args.input_folder);
-    let mut config = dir.clone().to_path_buf();
+    let mut config = PathBuf::new();
+    config.set_file_name(&args.input_folder);
     config.push("config.toml");
 
     let content = std::fs::read_to_string(config).unwrap();
     let config: Config = toml::from_str(&content).unwrap();
 
     println!("Hello, world! config={:?}", config);
+
+    let tiled_model = SimpleTiledModel::new(config, dir.to_str().unwrap());
+    println!("{:?}", tiled_model);
 }
 
 #[test]
