@@ -60,7 +60,7 @@ impl TileObject {
 
 impl SimpleTiledModel {
     pub fn new(config: Config, folder: &str) -> Result<SimpleTiledModel, Box<dyn Error>> {
-        if config.tiles.len() == 0 {
+        if config.tiles.is_empty() {
             Err("No tiles in config file")?
         }
 
