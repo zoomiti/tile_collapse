@@ -74,22 +74,36 @@ impl SimpleTiledModel {
             let a: fn(i32) -> i32;
             let b: fn(i32) -> i32;
             let cardinality: i32;
-            match tile.symmetry.as_str() {
-                "L" => {
+            match tile.symmetry.as_bytes()[0] {
+                b'L' => {
                     cardinality = 4;
                     a = |i| (i + 1) % 4;
                     b = |i| if i % 2 == 0 { i + 1 } else { i - 1 };
                 }
-                "T" => {
+                b'T' => {
                     cardinality = 4;
                     a = |i| (i + 1) % 4;
-                    b = |i| if i % 2 == 0 { i + 1 } else { i - 1 };
+                    b = |i| if i % 2 == 0 { i } else { 4 - i };
+                }
+                b'I' => {
+                    cardinality = 2;
+                    a = |i| i - 1;
+                    b = |i| i;
+                }
+                b'\\' => {
+                    cardinality = 2;
+                    a = |i| i - 1;
+                    b = |i| i - 1;
+                }
+                b'F' => {
+                    cardinality = 8;
+                    a = |i| if i < 4 { (i + 1) % 4 } else { 4 + (i - 1) % 4 };
+                    b = |i| if i < 4 { i + 4 } else { i - 4 };
                 }
                 _ => {
-                    //cardinality = 4;
-                    //a = |i| i;
-                    //b = |i| i;
-                    todo!("rest of symmetries");
+                    cardinality = 4;
+                    a = |i| i;
+                    b = |i| i;
                 }
             }
 
