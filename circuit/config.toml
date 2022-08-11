@@ -18,8 +18,7 @@ tiles = [
 
 neighbors = [
 	{ left="bridge", right="bridge" },
-#	{ left="bridge", right="bridge" },
-#	{ left="bridge 1", right="bridge 1" },
+	{ left="bridge 1", right="bridge 1" },
 #	{ left="bridge 1", right="connection 1" },
 #	{ left="bridge 1", right="t 2" },
 #	{ left="bridge 1", right="t 3" },

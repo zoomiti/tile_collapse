@@ -1,7 +1,9 @@
 use clap::{ArgAction, Parser};
-use std::path::Path;
-use std::{fmt::Debug, path::PathBuf};
-use tile_collapse::{Config, SimpleTiledModel};
+use std::{
+    fmt::Debug,
+    path::{Path, PathBuf},
+};
+use tile_collapse::{model::SimpleTiledModel, Config};
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
@@ -14,6 +16,11 @@ struct Args {
 
     #[clap(value_parser = is_dir)]
     input_folder: String,
+
+    #[clap()]
+    width: usize,
+    #[clap()]
+    height: usize,
 }
 
 fn is_dir(s: &str) -> Result<String, String> {
@@ -36,8 +43,10 @@ fn main() {
 
     println!("Hello, world! config={:?}", config);
 
-    let tiled_model = SimpleTiledModel::new(config, dir.to_str().unwrap());
-    println!("{:?}", tiled_model);
+    let tiled_model =
+        SimpleTiledModel::new(config, dir.to_str().unwrap(), args.width, args.height).unwrap();
+
+    println!("{}", tiled_model);
 }
 
 #[test]
