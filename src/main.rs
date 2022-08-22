@@ -3,7 +3,10 @@ use std::{
     fmt::Debug,
     path::{Path, PathBuf},
 };
-use tile_collapse::{model::SimpleTiledModel, Config};
+use tile_collapse::{
+    model::{Model, SimpleTiledModel},
+    Config,
+};
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
@@ -34,19 +37,24 @@ fn main() {
     let args = Args::parse();
 
     let dir = Path::new(&args.input_folder);
-    let mut config = PathBuf::new();
-    config.set_file_name(&args.input_folder);
+    let mut config = PathBuf::from(&args.input_folder);
     config.push("config.toml");
 
     let content = std::fs::read_to_string(config).unwrap();
     let config: Config = toml::from_str(&content).unwrap();
 
-    println!("Hello, world! config={:?}", config);
+    //println!("Hello, world! config={:?}", config);
 
-    let tiled_model =
-        SimpleTiledModel::new(config, dir.to_str().unwrap(), args.width, args.height).unwrap();
-
-    println!("{}", tiled_model);
+    if let Ok(mut tiled_model) =
+        SimpleTiledModel::new(config, dir.to_str().unwrap(), args.width, args.height)
+            .map_err(|err| println!("{err}"))
+    {
+        println!("{tiled_model}");
+        while tiled_model.run(rand::random(), isize::MAX) {}
+        println!("{tiled_model}");
+        let res = tiled_model.save(Path::new("a.png"));
+        println!("{:?}", res);
+    }
 }
 
 #[test]
