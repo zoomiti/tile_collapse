@@ -527,7 +527,7 @@ pub mod model {
                     for x in 0..self.width {
                         write!(
                             f,
-                            "{}, ",
+                            "{},\t",
                             self.tile_names[self.observed[x + y * self.width].unwrap()]
                         )?;
                     }
