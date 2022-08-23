@@ -5,11 +5,18 @@ authors = ["zoomiti"]
 edition = "2021"
 readme = "README.md"
 license-file = "LICENSE"
-keywords = ["wave-function-collapse", "graphics"]
+keywords = ["graphics"]
 categories = ["command-line-utilities"]
 repository = "https://github.com/zoomiti/tile_collapse"
 description = "An implementation of the Wave Function Collapse algorithm for creating images from tilesets and adjacency data"
 
+[lib]
+name = "tile_collapse"
+path = "src/lib.rs"
+
+[[bin]]
+name = "tile_collapse"
+path = "src/main.rs"
 
 [dependencies]
 clap = { version = "3.2.16", features = ["derive"] }
