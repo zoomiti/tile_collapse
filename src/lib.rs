@@ -63,7 +63,7 @@ pub mod model {
     }
 
     pub trait Model {
-        fn run(&mut self, seed: u64, limit: isize) -> bool;
+        fn run(&mut self, seed: u64, limit: usize) -> bool;
         fn save(&self, path: &Path) -> Result<(), Box<dyn Error>>;
     }
 
@@ -86,10 +86,10 @@ pub mod model {
 
         width: usize,
         height: usize,
-        t: usize,
+        num_tiles: usize,
         n: usize,
 
-        //periodic: bool,
+        periodic: bool,
         weight_log_weights: Vec<f64>,
         distribution: Vec<f64>,
 
@@ -112,6 +112,7 @@ pub mod model {
             folder: &str,
             width: usize,
             height: usize,
+            periodic: bool,
             heuristic: Heuristic,
         ) -> Result<Self, Box<dyn Error>> {
             if config.tiles.is_empty() {
@@ -315,7 +316,7 @@ pub mod model {
                 observed_so_far: 0,
                 width,
                 height,
-                t: num_tiles,
+                num_tiles,
                 n: 1,
                 weight_log_weights: vec![0.; num_tiles],
                 distribution: vec![0.; num_tiles],
@@ -327,11 +328,12 @@ pub mod model {
                 sums_of_weight_log_weights: vec![0.0; width * height],
                 entropies: vec![starting_entropy; width * height],
                 heuristic,
+                periodic,
             })
         }
         fn clear(&mut self) {
             for i in 0..self.wave.len() {
-                for t in 0..self.t {
+                for t in 0..self.num_tiles {
                     self.wave[i][t] = true;
                     for (d, opp) in OPPOSITE.iter().enumerate() {
                         self.compatible[i][t][d] = self.propagator[*opp][t].len() as isize;
@@ -348,8 +350,9 @@ pub mod model {
         fn next_unobserved_node(&mut self, rng: &mut ChaCha8Rng) -> Option<usize> {
             if self.heuristic == Heuristic::ScanLine {
                 for i in self.observed_so_far..self.wave.len() {
-                    // TODO: add perioidic
-                    if i % self.width + self.n > self.width || i / self.width + self.n > self.height
+                    if !self.periodic
+                        && (i % self.width + self.n > self.width
+                            || i / self.width + self.n > self.height)
                     {
                         continue;
                     }
@@ -363,8 +366,9 @@ pub mod model {
                 let mut min = 10_000.;
                 let mut argmin = None;
                 for (i, remaining_values) in self.sums_of_ones.iter().enumerate() {
-                    // TODO: add periodic
-                    if i % self.width + self.n > self.width || i / self.width + self.n > self.height
+                    if !self.periodic
+                        && (i % self.width + self.n > self.width
+                            || i / self.width + self.n > self.height)
                     {
                         continue;
                     }
@@ -395,7 +399,7 @@ pub mod model {
                 *distribution = if *w { weight } else { 0.0 };
             }
             let r = random_from_distr(&self.distribution, rng.gen());
-            for t in 0..self.t {
+            for t in 0..self.num_tiles {
                 if self.wave[node][t] != (t == r) {
                     self.ban(node, t);
                 }
@@ -420,18 +424,19 @@ pub mod model {
         fn propagate(&mut self) -> bool {
             while let Some((i1, t1)) = self.stack.pop() {
                 let x1 = i1 % self.width;
-                let y1 = i1 / self.height;
+                let y1 = i1 / self.width;
 
                 for d in 0..4 {
                     let width = self.width as isize;
                     let height = self.height as isize;
                     let mut x2 = x1 as isize + DX[d];
                     let mut y2 = y1 as isize + DY[d];
-                    //TODO: implement periodic
-                    if x2 < 0
-                        || y2 < 0
-                        || x2 as usize + self.n > self.width
-                        || y2 as usize + self.n > self.height
+
+                    if !self.periodic
+                        && (x2 < 0
+                            || y2 < 0
+                            || x2 as usize + self.n > self.width
+                            || y2 as usize + self.n > self.height)
                     {
                         continue;
                     }
@@ -458,6 +463,9 @@ pub mod model {
                     }
 
                     for t2 in ban_list {
+                        if t2 == 0 {
+                            //println!("Banning 0");
+                        }
                         self.ban(i2 as usize, t2);
                     }
                 }
@@ -467,19 +475,22 @@ pub mod model {
     }
 
     impl Model for SimpleTiled {
-        fn run(&mut self, seed: u64, limit: isize) -> bool {
+        fn run(&mut self, seed: u64, limit: usize) -> bool {
             println!("Ran this model");
             self.clear();
             let mut rng = ChaCha8Rng::seed_from_u64(seed);
 
             for _ in 0..limit {
                 if let Some(node) = self.next_unobserved_node(&mut rng) {
+                    //println!("Found a node");
                     self.observe(node, &mut rng);
                     let success = self.propagate();
                     if !success {
+                        println!("Propagation failed");
                         return false;
                     }
                 } else {
+                    println!("Ran out of nodes");
                     for i in 0..self.wave.len() {
                         for t in 0..self.wave[i].len() {
                             if self.wave[i][t] {
@@ -488,14 +499,17 @@ pub mod model {
                             }
                         }
                     }
-                    println!("{:?}", self.observed);
-                    return self.observed.iter().any(Option::is_none);
+                    println!("Observed: {:?}", self.observed);
+                    return !self.observed.iter().any(Option::is_none);
                 }
             }
             true
         }
 
         fn save(&self, path: &Path) -> Result<(), Box<dyn Error>> {
+            if self.observed.iter().any(Option::is_none) {
+                return Err("Model is not fully rendered")?;
+            }
             let mut imgbuf = ImageBuffer::new(
                 (self.width * self.tile_size) as u32,
                 (self.height * self.tile_size) as u32,

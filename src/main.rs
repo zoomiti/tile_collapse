@@ -51,12 +51,13 @@ fn main() {
         dir.to_str().unwrap(),
         args.width,
         args.height,
-        Heuristic::ScanLine,
+        true,
+        Heuristic::Entropy,
     )
     .map_err(|err| println!("{err}"))
     {
         println!("{tiled_model}");
-        while tiled_model.run(rand::random(), isize::MAX) {}
+        while !tiled_model.run(rand::random(), usize::MAX) {}
         println!("{tiled_model}");
         let res = tiled_model.save(Path::new("a.png"));
         println!("{:?}", res);
