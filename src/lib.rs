@@ -42,8 +42,9 @@ struct Neighbor {
 }
 
 pub mod model {
-    use std::{collections::HashMap, error::Error, fmt::Display, path::Path, str::FromStr};
+    use std::{collections::HashMap, error::Error, fmt::Display, path::Path};
 
+    use clap::clap_derive::ArgEnum;
     use image::{GenericImage, ImageBuffer};
     use indicatif::{ProgressBar, ProgressStyle};
     use rand::prelude::*;
@@ -55,26 +56,11 @@ pub mod model {
     static DX: [isize; 4] = [-1, 0, 1, 0];
     static DY: [isize; 4] = [0, 1, 0, -1];
 
-    #[derive(PartialEq, Debug)]
-    #[allow(dead_code)]
+    #[derive(PartialEq, Debug, ArgEnum, Clone)]
     pub enum Heuristic {
         Entropy,
         MRV,
         ScanLine,
-    }
-
-    impl FromStr for Heuristic {
-        type Err = String;
-
-        fn from_str(s: &str) -> Result<Self, Self::Err> {
-            use self::Heuristic::*;
-            match s.to_lowercase().as_str() {
-                "entropy" => Ok(Entropy),
-                "mrv" => Ok(MRV),
-                "scanline" => Ok(ScanLine),
-                _ => Err(String::from("Not a heuristic")),
-            }
-        }
     }
 
     pub trait Model {
@@ -132,6 +118,8 @@ pub mod model {
         ) -> Result<Self, Box<dyn Error>> {
             if config.tiles.is_empty() {
                 Err("No tiles in config file")?;
+            } else if config.neighbors.is_empty() {
+                Err("No Neighbors in config file")?;
             }
 
             let mut tiles = Vec::new();
