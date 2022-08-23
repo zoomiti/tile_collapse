@@ -27,6 +27,9 @@ struct Args {
 
     #[clap(short, long, default_value = "ScanLine")]
     heuristic: Heuristic,
+
+    #[clap(short, long)]
+    periodic: bool,
 }
 
 fn is_dir(s: &str) -> Result<String, String> {
@@ -54,8 +57,8 @@ fn main() {
         dir.to_str().unwrap(),
         args.width,
         args.height,
-        true,
-        Heuristic::MRV,
+        args.periodic,
+        args.heuristic,
     )
     .map_err(|err| println!("{err}"))
     {
