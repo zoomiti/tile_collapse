@@ -56,7 +56,7 @@ pub mod model {
 
     #[derive(PartialEq, Debug)]
     #[allow(dead_code)]
-    enum Heuristic {
+    pub enum Heuristic {
         Entropy,
         MRV,
         ScanLine,
@@ -68,7 +68,7 @@ pub mod model {
     }
 
     #[derive(Debug)]
-    pub struct SimpleTiledModel {
+    pub struct SimpleTiled {
         tiles: Vec<TileObject>,
 
         tile_names: Vec<String>,
@@ -106,13 +106,14 @@ pub mod model {
         heuristic: Heuristic,
     }
 
-    impl SimpleTiledModel {
+    impl SimpleTiled {
         pub fn new(
             config: Config,
             folder: &str,
             width: usize,
             height: usize,
-        ) -> Result<SimpleTiledModel, Box<dyn Error>> {
+            heuristic: Heuristic,
+        ) -> Result<Self, Box<dyn Error>> {
             if config.tiles.is_empty() {
                 Err("No tiles in config file")?;
             }
@@ -302,7 +303,7 @@ pub mod model {
                 tiles.iter().map(|t| t.weight).map(|w| w * w.ln()).sum();
             let starting_entropy = sum_of_weights.ln() - sum_of_weight_log_weights / sum_of_weights;
 
-            Ok(SimpleTiledModel {
+            Ok(SimpleTiled {
                 tiles,
                 tile_names,
                 tile_size,
@@ -325,7 +326,7 @@ pub mod model {
                 sums_of_weights: vec![0.; width * height],
                 sums_of_weight_log_weights: vec![0.0; width * height],
                 entropies: vec![starting_entropy; width * height],
-                heuristic: Heuristic::Entropy,
+                heuristic,
             })
         }
         fn clear(&mut self) {
@@ -345,27 +346,43 @@ pub mod model {
             self.observed_so_far = 0;
         }
         fn next_unobserved_node(&mut self, rng: &mut ChaCha8Rng) -> Option<usize> {
-            let mut min = 10_000.;
-            let mut argmin = None;
-            for (i, remaining_values) in self.sums_of_ones.iter().enumerate() {
-                // TODO: add periodic
-                if i % self.width + self.n > self.width || i / self.width + self.n > self.height {
-                    continue;
-                }
-                let entropy = if self.heuristic == Heuristic::Entropy {
-                    self.entropies[i]
-                } else {
-                    *remaining_values as f64
-                };
-                if *remaining_values > 1 && entropy <= min {
-                    let noise = 0.000_001 * rng.gen::<f64>();
-                    if entropy + noise < min {
-                        min = entropy + noise;
-                        argmin = Some(i);
+            if self.heuristic == Heuristic::ScanLine {
+                for i in self.observed_so_far..self.wave.len() {
+                    // TODO: add perioidic
+                    if i % self.width + self.n > self.width || i / self.width + self.n > self.height
+                    {
+                        continue;
+                    }
+                    if self.sums_of_ones[i] > 1 {
+                        self.observed_so_far = i + 1;
+                        return Some(i);
                     }
                 }
+                None
+            } else {
+                let mut min = 10_000.;
+                let mut argmin = None;
+                for (i, remaining_values) in self.sums_of_ones.iter().enumerate() {
+                    // TODO: add periodic
+                    if i % self.width + self.n > self.width || i / self.width + self.n > self.height
+                    {
+                        continue;
+                    }
+                    let entropy = if self.heuristic == Heuristic::Entropy {
+                        self.entropies[i]
+                    } else {
+                        *remaining_values as f64
+                    };
+                    if *remaining_values > 1 && entropy <= min {
+                        let noise = 0.000_001 * rng.gen::<f64>();
+                        if entropy + noise < min {
+                            min = entropy + noise;
+                            argmin = Some(i);
+                        }
+                    }
+                }
+                argmin
             }
-            argmin
         }
         fn observe(&mut self, node: usize, rng: &mut ChaCha8Rng) {
             let w = &self.wave[node];
@@ -449,7 +466,7 @@ pub mod model {
         }
     }
 
-    impl Model for SimpleTiledModel {
+    impl Model for SimpleTiled {
         fn run(&mut self, seed: u64, limit: isize) -> bool {
             println!("Ran this model");
             self.clear();
@@ -497,7 +514,7 @@ pub mod model {
         }
     }
 
-    impl Display for SimpleTiledModel {
+    impl Display for SimpleTiled {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             let count = self
                 .observed

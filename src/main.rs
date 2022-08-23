@@ -4,7 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 use tile_collapse::{
-    model::{Model, SimpleTiledModel},
+    model::{Heuristic, Model, SimpleTiled},
     Config,
 };
 
@@ -46,9 +46,14 @@ fn main() {
 
     //println!("Hello, world! config={:?}", config);
 
-    if let Ok(mut tiled_model) =
-        SimpleTiledModel::new(config, dir.to_str().unwrap(), args.width, args.height)
-            .map_err(|err| println!("{err}"))
+    if let Ok(mut tiled_model) = SimpleTiled::new(
+        config,
+        dir.to_str().unwrap(),
+        args.width,
+        args.height,
+        Heuristic::ScanLine,
+    )
+    .map_err(|err| println!("{err}"))
     {
         println!("{tiled_model}");
         while tiled_model.run(rand::random(), isize::MAX) {}
