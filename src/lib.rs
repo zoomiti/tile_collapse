@@ -1,6 +1,4 @@
-use std::{collections::HashMap, error::Error, fmt::Display};
-
-use image::DynamicImage;
+use std::{ffi::OsStr, path::Path};
 
 use serde::Deserialize;
 
@@ -11,7 +9,8 @@ pub struct Config {
 }
 
 mod tile {
-    use super::*;
+    use super::Deserialize;
+    use image::DynamicImage;
 
     #[derive(Deserialize, Debug)]
     pub struct Tile {
@@ -21,20 +20,18 @@ mod tile {
     }
 
     #[derive(Clone, Debug)]
-    pub struct TileObject {
+    pub(crate) struct TileObject {
         pub image: DynamicImage,
         pub weight: f64,
     }
 
     impl TileObject {
         pub fn rotate_90(&mut self) {
-            self.image = self.image.rotate90();
-            self.image = self.image.rotate90();
-            self.image = self.image.rotate90();
+            self.image = self.image.rotate270();
         }
 
         pub fn fliph(&mut self) {
-            self.image = self.image.fliph()
+            self.image = self.image.fliph();
         }
     }
 }
@@ -45,15 +42,13 @@ struct Neighbor {
 }
 
 pub mod model {
-    use std::path::Path;
+    use std::{collections::HashMap, error::Error, fmt::Display, path::Path};
 
     use image::{GenericImage, ImageBuffer};
     use rand::prelude::*;
     use rand_chacha::ChaCha8Rng;
 
-    use crate::tile::TileObject;
-
-    use super::*;
+    use crate::{name_from_file_name, random_from_distr, tile::TileObject, Config};
 
     static OPPOSITE: [usize; 4] = [2, 3, 0, 1];
     static DX: [isize; 4] = [-1, 0, 1, 0];
@@ -119,7 +114,7 @@ pub mod model {
             height: usize,
         ) -> Result<SimpleTiledModel, Box<dyn Error>> {
             if config.tiles.is_empty() {
-                Err("No tiles in config file")?
+                Err("No tiles in config file")?;
             }
 
             let mut tiles = Vec::new();
@@ -166,19 +161,20 @@ pub mod model {
                 }
 
                 let t = action.len();
-                first_occurence.insert(
-                    Path::new(&tile.name)
-                        .file_stem()
-                        .and_then(std::ffi::OsStr::to_str)
-                        .and_then(|s| Some(s.to_owned()))
-                        .unwrap(),
-                    t,
-                );
+                if let Some(path) = Path::new(&tile.name)
+                    .file_stem()
+                    .and_then(std::ffi::OsStr::to_str)
+                    .map(ToOwned::to_owned)
+                {
+                    first_occurence.insert(path, t);
+                } else {
+                    Err("Failed to extract tile name from file")?;
+                }
 
                 let mut map: [[i32; 8]; 8] = [[0; 8]; 8];
                 for i in 0..cardinality {
-                    let index: usize = i.try_into().unwrap();
-                    let t: i32 = t.try_into().unwrap();
+                    let index: usize = i.try_into()?;
+                    let t: i32 = t.try_into()?;
                     map[index][0] = i + t;
                     map[index][1] = a(i) + t;
                     map[index][2] = a(a(i)) + t;
@@ -197,75 +193,84 @@ pub mod model {
                         image: image.clone(),
                         weight: tile.weight.unwrap_or(1.0),
                     });
-                    tile_names.push(format!(
-                        "{} 0",
-                        Path::new(&tile.name).file_stem().unwrap().to_str().unwrap()
-                    ));
+
+                    tile_names.push(format!("{} 0", name_from_file_name(&tile.name)?));
 
                     for i in 1..cardinality {
                         if i <= 3 {
-                            let mut new_tile = tiles.get(t + i as usize - 1).unwrap().clone();
+                            let mut new_tile = {
+                                let this = tiles.get(t + i as usize - 1);
+                                match this {
+                                    Some(val) => val,
+                                    None => unreachable!(),
+                                }
+                            }
+                            .clone();
                             new_tile.rotate_90();
                             tiles.push(new_tile);
                         } else if i >= 4 {
-                            let mut new_tile = tiles.get(t + i as usize - 4).unwrap().clone();
+                            let mut new_tile = {
+                                let this = tiles.get(t + i as usize - 4);
+                                match this {
+                                    Some(val) => val,
+                                    None => unreachable!(),
+                                }
+                            }
+                            .clone();
                             new_tile.fliph();
                             tiles.push(new_tile);
                         }
-                        tile_names.push(format!(
-                            "{} {}",
-                            Path::new(&tile.name).file_stem().unwrap().to_str().unwrap(),
-                            i
-                        ));
+                        tile_names.push(format!("{} {}", name_from_file_name(&tile.name)?, i));
                     }
                 }
             }
-            let t: usize = action.len();
+            let num_tiles: usize = action.len();
 
-            let mut dense_propagater = vec![vec![vec![false; t]; t]; 4];
-            let mut propagator = vec![vec![vec![]; t]; 4];
+            let mut dense_propagater = vec![vec![vec![false; num_tiles]; num_tiles]; 4];
+            let mut propagator = vec![vec![vec![]; num_tiles]; 4];
 
             for neighbor in &config.neighbors {
                 // TODO: implement subsets here
-                let left: Vec<String> = neighbor.left.split(' ').map(str::to_string).collect();
-                let right: Vec<String> = neighbor.right.split(' ').map(str::to_string).collect();
-                let l: usize = action[*first_occurence.get(&left[0]).unwrap()][if left.len() == 1 {
-                    0
-                } else {
-                    left[1].parse().unwrap()
-                }]
-                .try_into()
-                .unwrap();
-                let d = action[l][1] as usize;
-                let r: usize = action[*first_occurence.get(&right[0]).unwrap()][if right.len() == 1
-                {
-                    0
-                } else {
-                    right[1].parse().unwrap()
-                }]
-                .try_into()
-                .unwrap();
-                let u = action[r][1] as usize;
+                let left_tile_name: Vec<String> =
+                    neighbor.left.split(' ').map(str::to_string).collect();
+                let right_tile_name: Vec<String> =
+                    neighbor.right.split(' ').map(str::to_string).collect();
+                let left: usize =
+                    action[first_occurence[(&left_tile_name[0])]][if left_tile_name.len() == 1 {
+                        0
+                    } else {
+                        left_tile_name[1].parse()?
+                    }]
+                    .try_into()?;
+                let down = action[left][1] as usize;
+                let right: usize =
+                    action[first_occurence[&right_tile_name[0]]][if right_tile_name.len() == 1 {
+                        0
+                    } else {
+                        right_tile_name[1].parse()?
+                    }]
+                    .try_into()?;
+                let up = action[right][1] as usize;
 
-                dense_propagater[0][r][l] = true;
-                dense_propagater[0][action[r][6] as usize][action[l][6] as usize] = true;
-                dense_propagater[0][action[l][4] as usize][action[r][4] as usize] = true;
-                dense_propagater[0][action[l][2] as usize][action[r][2] as usize] = true;
+                dense_propagater[0][right][left] = true;
+                dense_propagater[0][action[right][6] as usize][action[left][6] as usize] = true;
+                dense_propagater[0][action[left][4] as usize][action[right][4] as usize] = true;
+                dense_propagater[0][action[left][2] as usize][action[right][2] as usize] = true;
 
-                dense_propagater[1][u][d] = true;
-                dense_propagater[1][action[d][6] as usize][action[u][6] as usize] = true;
-                dense_propagater[1][action[u][4] as usize][action[d][4] as usize] = true;
-                dense_propagater[1][action[d][2] as usize][action[u][2] as usize] = true;
+                dense_propagater[1][up][down] = true;
+                dense_propagater[1][action[down][6] as usize][action[up][6] as usize] = true;
+                dense_propagater[1][action[up][4] as usize][action[down][4] as usize] = true;
+                dense_propagater[1][action[down][2] as usize][action[up][2] as usize] = true;
             }
 
-            for t2 in 0..t {
-                for t1 in 0..t {
+            for t2 in 0..num_tiles {
+                for t1 in 0..num_tiles {
                     dense_propagater[2][t2][t1] = dense_propagater[0][t1][t2];
                     dense_propagater[3][t2][t1] = dense_propagater[1][t1][t2];
                 }
             }
 
-            let mut sparse_propagator: Vec<Vec<Vec<usize>>> = vec![vec![vec![]; t]; 4];
+            let mut sparse_propagator: Vec<Vec<Vec<usize>>> = vec![vec![vec![]; num_tiles]; 4];
 
             for (d, (sp, tp)) in sparse_propagator
                 .iter_mut()
@@ -273,8 +278,8 @@ pub mod model {
                 .enumerate()
             {
                 for (t1, (sp, tp)) in sp.iter_mut().zip(tp).enumerate() {
-                    for t2 in 0..t {
-                        if tp[t2] {
+                    for (t2, tp) in tp.iter().enumerate() {
+                        if *tp {
                             sp.push(t2);
                         }
                     }
@@ -291,7 +296,7 @@ pub mod model {
                 }
             }
 
-            let tile_size = tiles.get(0).unwrap().image.width() as usize;
+            let tile_size = tiles[0].image.width() as usize;
             let sum_of_weights = tiles.iter().map(|t| t.weight).sum::<f64>();
             let sum_of_weight_log_weights =
                 tiles.iter().map(|t| t.weight).map(|w| w * w.ln()).sum();
@@ -301,18 +306,18 @@ pub mod model {
                 tiles,
                 tile_names,
                 tile_size,
-                wave: vec![vec![true; t]; width * height],
+                wave: vec![vec![true; num_tiles]; width * height],
                 propagator,
-                compatible: vec![vec![vec![0; 4]; t]; width * height],
+                compatible: vec![vec![vec![0; 4]; num_tiles]; width * height],
                 observed: vec![None; width * height],
                 stack: vec![],
                 observed_so_far: 0,
                 width,
                 height,
-                t,
+                t: num_tiles,
                 n: 1,
-                weight_log_weights: vec![0.; t],
-                distribution: vec![0.; t],
+                weight_log_weights: vec![0.; num_tiles],
+                distribution: vec![0.; num_tiles],
                 sums_of_ones: vec![0; width * height],
                 sum_of_weights,
                 sum_of_weight_log_weights,
@@ -327,8 +332,8 @@ pub mod model {
             for i in 0..self.wave.len() {
                 for t in 0..self.t {
                     self.wave[i][t] = true;
-                    for d in 0..4 {
-                        self.compatible[i][t][d] = self.propagator[OPPOSITE[d]][t].len() as isize;
+                    for (d, opp) in OPPOSITE.iter().enumerate() {
+                        self.compatible[i][t][d] = self.propagator[*opp][t].len() as isize;
                     }
                 }
                 self.sums_of_ones[i] = self.tiles.len() as isize;
@@ -353,7 +358,7 @@ pub mod model {
                     *remaining_values as f64
                 };
                 if *remaining_values > 1 && entropy <= min {
-                    let noise = 0.000001 * rng.gen::<f64>();
+                    let noise = 0.000_001 * rng.gen::<f64>();
                     if entropy + noise < min {
                         min = entropy + noise;
                         argmin = Some(i);
@@ -436,7 +441,7 @@ pub mod model {
                     }
 
                     for t2 in ban_list {
-                        self.ban(i2 as usize, t2)
+                        self.ban(i2 as usize, t2);
                     }
                 }
             }
@@ -467,7 +472,7 @@ pub mod model {
                         }
                     }
                     println!("{:?}", self.observed);
-                    return self.observed.iter().any(|obs| obs.is_none());
+                    return self.observed.iter().any(Option::is_none);
                 }
             }
             true
@@ -528,4 +533,11 @@ fn random_from_distr(weights: &[f64], r: f64) -> usize {
         }
     }
     0
+}
+
+fn name_from_file_name(file_name: &str) -> Result<&str, &str> {
+    match Path::new(file_name).file_stem().and_then(OsStr::to_str) {
+        Some(path) => Ok(path),
+        None => Err("Couldn't extract tile name from file name"),
+    }
 }

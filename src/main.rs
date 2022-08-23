@@ -27,9 +27,10 @@ struct Args {
 }
 
 fn is_dir(s: &str) -> Result<String, String> {
-    match Path::new(s).is_dir() {
-        true => Ok(s.to_string()),
-        false => Err(format!("{} isn't a directory", s)),
+    if Path::new(s).is_dir() {
+        Ok(s.to_string())
+    } else {
+        Err(format!("{} isn't a directory", s))
     }
 }
 
