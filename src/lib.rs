@@ -42,10 +42,10 @@ struct Neighbor {
 }
 
 pub mod model {
-    use std::{collections::HashMap, error::Error, fmt::Display, path::Path};
+    use std::{collections::HashMap, error::Error, fmt::Display, path::Path, str::FromStr};
 
     use image::{GenericImage, ImageBuffer};
-    use indicatif::ProgressBar;
+    use indicatif::{ProgressBar, ProgressStyle};
     use rand::prelude::*;
     use rand_chacha::ChaCha8Rng;
 
@@ -61,6 +61,20 @@ pub mod model {
         Entropy,
         MRV,
         ScanLine,
+    }
+
+    impl FromStr for Heuristic {
+        type Err = String;
+
+        fn from_str(s: &str) -> Result<Self, Self::Err> {
+            use self::Heuristic::*;
+            match s.to_lowercase().as_str() {
+                "entropy" => Ok(Entropy),
+                "mrv" => Ok(MRV),
+                "scanline" => Ok(ScanLine),
+                _ => Err(String::from("Not a heuristic")),
+            }
+        }
     }
 
     pub trait Model {
@@ -481,6 +495,12 @@ pub mod model {
             self.clear();
             let mut rng = ChaCha8Rng::seed_from_u64(seed);
             let bar = ProgressBar::new(self.observed.len() as u64);
+            bar.set_style(
+                ProgressStyle::with_template(
+                    "{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] ({eta:>3}) [{pos:>7}/{len:7}] {msg}",
+                )
+                .unwrap(),
+            );
 
             for _ in 0..limit {
                 if let Some(node) = self.next_unobserved_node(&mut rng) {
@@ -493,8 +513,8 @@ pub mod model {
                         return false;
                     }
                 } else {
-                    println!("Ran out of nodes");
-                    bar.finish();
+                    //println!("Ran out of nodes");
+                    bar.finish_with_message("Done");
                     for i in 0..self.wave.len() {
                         for t in 0..self.wave[i].len() {
                             if self.wave[i][t] {

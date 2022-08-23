@@ -24,6 +24,9 @@ struct Args {
     width: usize,
     #[clap()]
     height: usize,
+
+    #[clap(short, long, default_value = "ScanLine")]
+    heuristic: Heuristic,
 }
 
 fn is_dir(s: &str) -> Result<String, String> {
@@ -52,7 +55,7 @@ fn main() {
         args.width,
         args.height,
         true,
-        Heuristic::Entropy,
+        Heuristic::MRV,
     )
     .map_err(|err| println!("{err}"))
     {
