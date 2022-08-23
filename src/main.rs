@@ -56,9 +56,9 @@ fn main() {
     )
     .map_err(|err| println!("{err}"))
     {
-        println!("{tiled_model}");
+        //println!("{tiled_model}");
         while !tiled_model.run(rand::random(), usize::MAX) {}
-        println!("{tiled_model}");
+        //println!("{tiled_model}");
         let res = tiled_model.save(Path::new("a.png"));
         println!("{:?}", res);
     }

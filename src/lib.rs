@@ -45,6 +45,7 @@ pub mod model {
     use std::{collections::HashMap, error::Error, fmt::Display, path::Path};
 
     use image::{GenericImage, ImageBuffer};
+    use indicatif::ProgressBar;
     use rand::prelude::*;
     use rand_chacha::ChaCha8Rng;
 
@@ -479,18 +480,21 @@ pub mod model {
             println!("Ran this model");
             self.clear();
             let mut rng = ChaCha8Rng::seed_from_u64(seed);
+            let bar = ProgressBar::new(self.observed.len() as u64);
 
             for _ in 0..limit {
                 if let Some(node) = self.next_unobserved_node(&mut rng) {
                     //println!("Found a node");
+                    bar.inc(1);
                     self.observe(node, &mut rng);
                     let success = self.propagate();
                     if !success {
-                        println!("Propagation failed");
+                        bar.abandon_with_message("Propagation failed");
                         return false;
                     }
                 } else {
                     println!("Ran out of nodes");
+                    bar.finish();
                     for i in 0..self.wave.len() {
                         for t in 0..self.wave[i].len() {
                             if self.wave[i][t] {
@@ -499,7 +503,7 @@ pub mod model {
                             }
                         }
                     }
-                    println!("Observed: {:?}", self.observed);
+                    //println!("Observed: {:?}", self.observed);
                     return !self.observed.iter().any(Option::is_none);
                 }
             }
